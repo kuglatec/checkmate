@@ -1,6 +1,9 @@
 #include "engine.c"
+#define FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 int main () {
-    printPosition(FENtoPosition("rnbqkbnr/1ppppppp/8/8/1P6/8/2PPPPPP/RNBQKBNR b KQkq - 0 3"));
-
+    struct Position pos = FENtoPosition(FEN);
+    ApplyCastlingRights(FEN, &pos);
+    printPosition(pos)rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1;
+    printf("\n:%d", pos.wcastle);
     return 0;
 }
