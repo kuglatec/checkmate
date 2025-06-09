@@ -2,45 +2,78 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
-struct Position FENtoPosition (char fen[256]) {
+#include <stdbool.h>
+struct Position FENtoPosition(char fen[256]) {
+  struct Position position;
+  memset(&position, 0, sizeof(struct Position)); // Initialize the struct
   int over = 0;
   const int len = strlen(fen);
-  char rank = 0;
-  char row = 0;
-  struct Position position;
+  char rank = 7;  // Start from the bottom rank (White's first rank)
+  char file = 0;
+  int field = 0; // Track the current FEN field
+
   for (int i = 0; i < len; i++) {
     char nextchar = fen[i];
-    if (isalpha(nextchar)) {
-      if (over == 0) {position.board[row][rank] = nextchar; row++;}
-      else {
-        switch (nextchar) {
-          case 'w':
-            position.player = 0;
-          case 'b':
-            position.player = 1;
+
+    if (over == 0) {
+      if (isalpha(nextchar)) {
+        position.board[file][rank] = nextchar;
+        file++;
+      }
+      if (nextchar == '/') {
+        rank--;
+        file = 0;
+      }
+      if (isdigit(nextchar)) {
+        int emptySquares = nextchar - '0';
+        for (int j = 0; j < emptySquares; j++) {
+          position.board[file][rank] = 'X';
+          file++;
         }
       }
-
-    }
-    if (nextchar == '/') {
-      rank++;
-      row = 0;
-    }
-
-    if (isdigit(nextchar)) {
-      const int nrow = row;
-      int emptySquares = nextchar - '0';  // Convert char digit to int
-      while (row < nrow + emptySquares) {
-        position.board[row][rank] = 'X';
-        row++;
+      if (nextchar == ' ') {
+        over = 1;
+        field++;
       }
-    }
-    if (nextchar == ' ') {
-      over = 1;
+    } else {
+      // Handle fields other than piece placement
+      switch (field) {
+        case 1: // Active color
+          position.player = (nextchar == 'w') ? 0 : 1;
+        field++;
+        break;
+      }
     }
   }
 
   return position;
+}
+void ApplyCastlingRights(char fen[256], struct Position *position) {
+  int spaceCount = 0;
+  position->wcastle = 0;
+  position->bcastle = 0;
+
+  for (int i = 0; fen[i] != '\0'; i++) {
+    if (fen[i] == ' ') {
+      spaceCount++;
+      if (spaceCount == 2) {
+        i++;
+        if (fen[i] == '-') {
+          return;
+        }
+        while (fen[i] != ' ') {
+          switch (fen[i]) {
+            case 'K': position->wcastle |= 1; break;
+            case 'Q': position->wcastle |= 2; break;
+            case 'k': position->bcastle |= 1; break;
+            case 'q': position->bcastle |= 2; break;
+          }
+          i++;
+        }
+        return;
+      }
+    }
+  }
 }
 void printPosition(struct Position position) {
   for (int i = 0; i < 8; i++) {
@@ -49,4 +82,16 @@ void printPosition(struct Position position) {
       printf("%c ", position.board[j][i]);
     }
   }
+}
+
+int queenValidityCheck(struct Position position, struct Move move) {
+
+}
+
+bool moveValidityCheck(struct Position position, struct Move move) {
+  switch (position.board[move.start[0]][move.start[1]]) {
+    case 'Q':
+      return queenValidityCheck(position, move);
+  }
+
 }
