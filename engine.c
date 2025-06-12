@@ -84,14 +84,38 @@ void printPosition(struct Position position) {
   }
 }
 
-int queenValidityCheck(struct Position position, struct Move move) {
 
+
+int isDiagonalMove(struct Move move) {
+  return abs(move.start[0] - move.end[0]) == abs(move.start[1] - move.end[1]);
+}
+int isStraightMove(struct Move move) {
+  return (move.start[0] == move.end[0]) || (move.start[1] == move.end[1]);
 }
 
-bool moveValidityCheck(struct Position position, struct Move move) {
+int moveValidityCheck(struct Position position, struct Move move) {
   switch (position.board[move.start[0]][move.start[1]]) {
     case 'Q':
       return queenValidityCheck(position, move);
   }
+}
 
+struct Square* getPathDiagonal(struct Move move) {
+
+}
+
+struct Square* getPathStraight(struct Move move) {
+  
+}
+
+struct Square* getPath(struct Move move, int dir) {
+  if (dir == 0) {
+    return getPathStraight(move);
+  }
+  else if (dir == 1) {
+    return getPathDiagonal(move);
+  }
+  else {
+    printf("error, invalid direction");
+  }
 }
