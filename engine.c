@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdlib.h>
 struct Position FENtoPosition(char fen[256]) {
   struct Position position;
   memset(&position, 0, sizeof(struct Position)); // Initialize the struct
@@ -93,10 +94,14 @@ int isStraightMove(struct Move move) {
   return (move.start[0] == move.end[0]) || (move.start[1] == move.end[1]);
 }
 
+int validityCheck(struct Position position, struct Move move) {
+  return 0;
+} 
+
 int moveValidityCheck(struct Position position, struct Move move) {
   switch (position.board[move.start[0]][move.start[1]]) {
     case 'Q':
-      return queenValidityCheck(position, move);
+      return validityCheck(position, move);
   }
 }
 
@@ -105,7 +110,7 @@ struct Square* getPathDiagonal(struct Move move) {
 }
 
 struct Square* getPathStraight(struct Move move) {
-  
+  struct Square* squares = (struct Square*)calloc(32, sizeof(struct Square));
 }
 
 struct Square* getPath(struct Move move, int dir) {
