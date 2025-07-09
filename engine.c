@@ -95,25 +95,81 @@ int isStraightMove(struct Move move) {
 }
 
 int validityCheck(struct Position position, struct Move move) {
+  /*
+  TODO: Piece ownership
+  */
+  printf("\nPiece: %c\n", position.board[move.start[0]][move.start[1]]);
+  if (isDiagonalMove(move)) {
+    switch (position.board[move.start[0]][move.start[1]])
+    {
+    case 'Q':
+    case 'q':
+    case 'B':
+    case 'b':
+      break;
+    }
+  }
+  else if (isStraightMove(move)) {
+    switch (position.board[move.start[0]][move.start[1]])
+    {
+    case 'Q':
+    case 'q':
+    case 'R':
+    case 'r':
+      return qrsvc(position, move);
+      break;
+    
+    default:
+      break;
+    }
+  }
   return 0;
 } 
 
-int moveValidityCheck(struct Position position, struct Move move) {
-  switch (position.board[move.start[0]][move.start[1]]) {
-    case 'Q':
-      return validityCheck(position, move);
+int qrsvc(struct Position postion, struct Move move) { //Queen-Rook-Straight-Validity-Check
+  struct Path path = getPath(move, )
+}
+
+struct Path getPathDiagonal(struct Move move) {
+
+}
+
+void addSquareVectors(struct Square* sq, struct Square direction) {
+  sq->x += direction.x;
+  sq->y += direction.y;
+}
+
+void multiplyVector(struct Square* vector, int factor) {
+  vector->x = vector->x * factor;
+  vector->y = vector->y * factor;
+}
+
+struct Path getPathStraight(struct Move move) {
+  size_t len;
+  if (move.start[0] == move.end[0]) {
+    len = abs(move.start[1] - move.end[1]) - 1;
+  } else {
+    len = abs(move.start[0] - move.end[0]) - 1;
   }
+  struct Square direction;
+  direction.x = (move.end[0] - move.start[0]) / (len + 1);
+  direction.y = (move.end[1] - move.start[1]) / (len + 1);
+  printf("\nDirection: %d/%d\n", direction.x, direction.y);
+  struct Square sq;
+  sq.x = move.start[0];
+  sq.y = move.start[1];
+  struct Square* squares = (struct Square*)calloc(len, sizeof(struct Square));
+  for (int i = 0; i < len; i++) {
+    addSquareVectors(&sq, direction);
+    squares[i] = sq;
+  }
+  struct Path pth;
+  pth.squares = squares;
+  pth.len = len;
+  return pth;
 }
 
-struct Square* getPathDiagonal(struct Move move) {
-
-}
-
-struct Square* getPathStraight(struct Move move) {
-  struct Square* squares = (struct Square*)calloc(32, sizeof(struct Square));
-}
-
-struct Square* getPath(struct Move move, int dir) {
+struct Path getPath(struct Move move, int dir) {
   if (dir == 0) {
     return getPathStraight(move);
   }
