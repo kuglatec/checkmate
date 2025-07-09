@@ -1,3 +1,4 @@
+#include <stddef.h>
 struct Position {
 char player; //The player to make his move. White = 0, Black = 1
 char wcastle;// Castle rights for white. 0 = no castling, 1 = kingside, 2 = queenside 3 = both.
@@ -20,4 +21,9 @@ struct Node {
     struct Move move;
     int nchildren;
     struct Node *children;
+};
+
+struct Path {
+    size_t len;
+    struct Square* squares;
 };
