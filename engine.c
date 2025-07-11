@@ -94,45 +94,6 @@ int isStraightMove(struct Move move) {
   return (move.start[0] == move.end[0]) || (move.start[1] == move.end[1]);
 }
 
-int validityCheck(struct Position position, struct Move move) {
-  /*
-  TODO: Piece ownership
-  */
-  printf("\nPiece: %c\n", position.board[move.start[0]][move.start[1]]);
-  if (isDiagonalMove(move)) {
-    switch (position.board[move.start[0]][move.start[1]])
-    {
-    case 'Q':
-    case 'q':
-    case 'B':
-    case 'b':
-      break;
-    }
-  }
-  else if (isStraightMove(move)) {
-    switch (position.board[move.start[0]][move.start[1]])
-    {
-    case 'Q':
-    case 'q':
-    case 'R':
-    case 'r':
-      return qrsvc(position, move);
-      break;
-    
-    default:
-      break;
-    }
-  }
-  return 0;
-} 
-
-int qrsvc(struct Position postion, struct Move move) { //Queen-Rook-Straight-Validity-Check
-  struct Path path = getPath(move, )
-}
-
-struct Path getPathDiagonal(struct Move move) {
-
-}
 
 void addSquareVectors(struct Square* sq, struct Square direction) {
   sq->x += direction.x;
@@ -142,6 +103,36 @@ void addSquareVectors(struct Square* sq, struct Square direction) {
 void multiplyVector(struct Square* vector, int factor) {
   vector->x = vector->x * factor;
   vector->y = vector->y * factor;
+}
+
+struct Path getPathDiagonal(struct Move move) {
+  size_t len = abs(move.start[0] - move.end[0]) - 1;
+  
+
+  struct Square direction;
+  direction.x = (move.end[0] - move.start[0]) / (len + 1);
+  direction.y = (move.end[1] - move.start[1]) / (len + 1);
+  
+  printf("\nDiagonal Direction: %d/%d\n", direction.x, direction.y);
+  
+
+  struct Square sq;
+  sq.x = move.start[0];
+  sq.y = move.start[1];
+  
+
+  struct Square* squares = (struct Square*)calloc(len, sizeof(struct Square));
+  
+
+  for (int i = 0; i < len; i++) {
+    addSquareVectors(&sq, direction);
+    squares[i] = sq;
+  }
+  
+  struct Path pth;
+  pth.squares = squares;
+  pth.len = len;
+  return pth;
 }
 
 struct Path getPathStraight(struct Move move) {
@@ -169,6 +160,11 @@ struct Path getPathStraight(struct Move move) {
   return pth;
 }
 
+
+char getPiece(struct Square sq, struct Position pos) {
+  return pos.board[sq.x][sq.y];
+}
+
 struct Path getPath(struct Move move, int dir) {
   if (dir == 0) {
     return getPathStraight(move);
@@ -180,3 +176,70 @@ struct Path getPath(struct Move move, int dir) {
     printf("error, invalid direction");
   }
 }
+
+
+int qrsvc(struct Position position, struct Move move, int owner) { //Queen-Rook-Straight-Validity-Check
+  struct Path path = getPath(move, 0);
+  for (int i = 0; i < path.len; i++) {
+    if (getPiece(path.squares[i], position) != 'X') {
+      printf("\n--path blocked--\n");
+      return 0; //some piece is blocking the path
+    }
+  }
+  printf("\n--valid--\n");
+  return 1;
+}
+
+int qbdvc(struct Position position, struct Move move, int owner) { //Queen-Bishop-diagonal-validitiy
+    struct Path path = getPath(move, 1);
+    for (int i = 0; i < path.len; i++) {
+    if (getPiece(path.squares[i], position) != 'X') {
+      printf("\n--path blocked--\n");
+      return 0; //some piece is blocking the path
+    }
+  }
+  printf("\n--valid--\n");
+  return 1;
+}
+
+int validityCheck(struct Position position, struct Move move) {
+  char dp = position.board[move.end[0]][move.end[1]];
+  char sp = position.board[move.start[0]][move.start[1]];
+  int owner = isupper(sp);
+  printf("\nP: %c\n", sp);
+  if (isupper(dp) == owner && dp != 'X') {
+    printf("\n--destination blocked--\n");
+    return 0; // some piece from the same player is blocking the destination square, making the move illegal.
+  }
+  if (isDiagonalMove(move)) {
+    printf("dia");
+    switch (sp)
+    {
+    case 'Q':
+    case 'q':
+    case 'B':
+    case 'b':
+    return qbdvc(position, move, owner);  
+    break;
+    }
+  }
+  else if (isStraightMove(move)) {
+    switch (sp)
+    {
+    case 'Q':
+    case 'q':
+    case 'R':
+    case 'r':
+      return qrsvc(position, move, owner);
+      break;
+    
+    default:
+      break;
+    }
+  }
+  else if (sp == 'N' || sp == 'n') {
+    return 1;
+  }
+  printf("\n--invalid move--\n");
+  return 0;
+} 
