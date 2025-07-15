@@ -202,6 +202,51 @@ int qbdvc(struct Position position, struct Move move, int owner) { //Queen-Bisho
   return 1;
 }
 
+int pvc(struct Position position, struct Move move, int owner) {
+  
+  if (move.start[0] == move.end[0]) { // Pawn moves straight    
+    printf("\nstraight pawn move");  
+    struct Square dsquare;
+    dsquare.x = move.end[0];
+    dsquare.y = move.end[1];  
+    if (getPiece(dsquare, position) != 'X') {
+      printf("\n--Target Square is blocked--");
+      return 0;
+    }
+    if (abs(move.start[1] - move.end[1]) == 2) {
+        if (move.start[1] == 1 || move.start[1] == 6){
+          return qrsvc(position, move, owner);
+        }
+        else {
+          printf("\nPawn already moved or field is blocked\n");
+          return 0;
+
+        }
+    
+      }
+    
+    else if (abs(move.start[1] - move.end[1]) == 1) {
+      return 1;
+    }
+  }
+
+//###################################################
+
+  else if ((abs(move.start[0] - move.end[0]) == 1) && (abs(move.start[1] - move.end[1]) == 1)){ // Pawn captures diagonal
+    struct Square dsquare;
+    dsquare.x = move.end[0];
+    dsquare.y = move.end[1];  
+    if (isupper(getPiece(dsquare, position)) != owner) {
+      printf("\n--Piece captured--");
+      return 1;
+    }
+    else {
+      printf("\n--Nothing to capture! invalid move--\n");
+    }
+  }
+  return 0;
+}
+
 int validityCheck(struct Position position, struct Move move) {
   char dp = position.board[move.end[0]][move.end[1]];
   char sp = position.board[move.start[0]][move.start[1]];
@@ -210,6 +255,10 @@ int validityCheck(struct Position position, struct Move move) {
   if (isupper(dp) == owner && dp != 'X') {
     printf("\n--destination blocked--\n");
     return 0; // some piece from the same player is blocking the destination square, making the move illegal.
+  }
+  if (sp == 'P' || sp == 'p') {
+    printf("\npvc");
+    return pvc(position, move, owner);
   }
   if (isDiagonalMove(move)) {
     printf("dia");
