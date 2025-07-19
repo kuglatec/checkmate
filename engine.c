@@ -138,8 +138,8 @@ struct Path getPathStraight(struct Move move) {
   }
   
   struct Square direction;
-  direction.x = (move.end.x - move.start.x) / (len + 1);
-  direction.y = (move.end.y - move.start.y) / (len + 1);
+  direction.x = (move.end.x > move.start.x) ? 1 : (move.end.x < move.start.x) ? -1 : 0;
+  direction.y = (move.end.y > move.start.y) ? 1 : (move.end.y < move.start.y) ? -1 : 0;
   
   
   
@@ -175,9 +175,11 @@ int qrsvc(struct Position position, struct Move move, int owner) { //Queen-Rook-
   struct Path path = getPath(move, 0);
   for (int i = 0; i < path.len; i++) {
     if (getPiece(path.squares[i], position) != 'X') {
-      return 0; //some piece is blocking the path
+      free(path.squares);
+      return 0;
     }
   }
+  free(path.squares);
   return 1;
 }
 
@@ -186,9 +188,11 @@ int qbdvc(struct Position position, struct Move move, int owner) { //Queen-Bisho
     for (int i = 0; i < path.len; i++) {
    
     if (getPiece(path.squares[i], position) != 'X') {
-      return 0; //some piece is blocking the path
+      free(path.squares);
+      return 0; 
     }
   }
+  free(path.squares);
   return 1;
 }
 
@@ -232,7 +236,7 @@ int pvc(struct Position position, struct Move move, int owner) {
   else if ((abs(move.start.x - move.end.x) == 1) && (abs(move.start.y - move.end.y) == 1)){ // Pawn captures diagonal
     struct Square dsquare = move.end;
     
-    if (isupper(getPiece(dsquare, position)) != owner) {
+    if ((isupper(getPiece(dsquare, position)) != owner) && (move.end.x )) {
       return 1;
     }
 
@@ -246,7 +250,7 @@ int validityCheck(struct Position position, struct Move move) {
   int owner = isupper(sp);
   
   
-  if (isupper(dp) == owner && dp != 'X') {
+  if ((isupper(dp) == owner && dp != 'X') || move.end.x < 0 || move.end.x > 7) {
     return 0; // some piece from the same player is blocking the destination square, making the move illegal.
   }
   
@@ -341,10 +345,13 @@ void getPawnSquares(struct Path* lines, struct Square piece, struct Position pos
   lines->squares[0].y = piece.y + dir;
   lines->squares[1].x = piece.x;
   lines->squares[1].y = piece.y + (dir * 2);
-  lines->squares[2].x = piece.x + 1;
   lines->squares[2].y = piece.y + dir;
-  lines->squares[3].x = piece.x - 1;
   lines->squares[3].y = piece.y + dir;
+  lines->squares[2].x = piece.x + 1;
+  lines->squares[3].x = piece.x - 1;
+  
+
+
   lines->len = 4;
 }
 
@@ -382,9 +389,9 @@ void genMoves(struct Move* moves, struct Position position, struct Square piece,
       getStraightSquares(&lines, piece);
       getDiagonalSquares(&lines, piece);
   }
-
   for (int i = 0; i < lines.len; i++) {
     mv.start = piece;
+    
     mv.end = lines.squares[i];
     if (validityCheck(position, mv)) {
       moves[*counter] = mv;
@@ -395,7 +402,6 @@ void genMoves(struct Move* moves, struct Position position, struct Square piece,
   free(lines.squares);
 }
 
-  
 
 struct Move* getMoves(struct Position position, int* counter) {
   struct Move* mvs = (struct Move*)calloc(218, sizeof(struct Move));
