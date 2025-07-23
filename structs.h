@@ -1,6 +1,6 @@
 #include <stddef.h>
 struct Position {
-int player; //The player to make his move. White = 0, Black = 1
+int player; //The player to make his move. Black = 0, White = 1
 int wcastle; // Castle rights for white. 0 = no castling, 1 = kingside, 2 = queenside 3 = both.
 int bcastle; // same for black
 char board[8][8];
@@ -15,7 +15,9 @@ struct Square {
 struct Move {
     struct Square start;
     struct Square end;
+    int promotes;
     char promotion; // Defines what the piece promotes to 
+    int is_castling;
 };
 
 struct Node {
