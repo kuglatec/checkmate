@@ -4,14 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int dbg = 1;
+const char wpromotions[4] = "QRBN";
+const char bpromotions[4] = "qrbn";
 
-char wpromotions[4] = "QRBN";
-char bpromotions[4] = "qrbn";
+int isThreatened(struct Position position, struct Square square);
 
-int isThreatened(struct Position* position, struct Square square);
 void printPosition(struct Position position);
-
 
 struct Position copyPosition(struct Position* original) {
     struct Position copy;
@@ -65,6 +63,10 @@ struct Position FENtoPosition(const char* fen) {
   return position;
 }
 
+char getPiece(struct Square sq, struct Position* pos) {
+  return pos->board[sq.x][sq.y];
+}
+
 void ApplyCastlingRights(const char* fen, struct Position *position) {
   int spaceCount = 0;
   position->wcastle = 0;
@@ -93,9 +95,33 @@ void ApplyCastlingRights(const char* fen, struct Position *position) {
   }
 }
 
-void printMoves(struct Move* moves, int len) {
+void ApplyEnpassantTarget(const char* fen, struct Position *position) {
+    int spaceCount = 0;
+    position->enpassant.valid = 0;
+
+    for (int i = 0; fen[i] != '\0'; i++) {
+        if (fen[i] == ' ') {
+            spaceCount++;
+            if (spaceCount == 3) {
+                i++;
+                // Feld ist „-“ → kein EP
+                if (fen[i] == '-') {
+                    return;
+                }
+                if (fen[i] && fen[i+1] && islower((unsigned char)fen[i]) && isdigit((unsigned char)fen[i+1])) {
+                    position->enpassant.square.x  = fen[i] - 'a';      
+                    position->enpassant.square.y  = fen[i+1] - '1';   
+                    position->enpassant.valid = 1;
+                }
+                return;
+            }
+        }
+    }
+}
+
+void printMoves(struct Move* moves, int len, struct Position position) {
   for (int i = 0; i < len; i++) {
-    printf("\n%d|%d -> %d|%d", moves[i].start.x, moves[i].start.y, moves[i].end.x, moves[i].end.y);
+    printf("\n%c: %d|%d -> %d|%d", getPiece(moves[i].start, &position), moves[i].start.x, moves[i].start.y, moves[i].end.x, moves[i].end.y);
     printf("\n");
   }
 }
@@ -137,6 +163,10 @@ void multiplyVector(struct Square* vector, int factor) {
   vector->x = vector->x * factor;
   vector->y = vector->y * factor;
 }
+
+
+
+
 
 struct Path getPathDiagonal(struct Move move) {
   int dx = move.end.x - move.start.x;
@@ -213,21 +243,92 @@ int incheck(struct Position* position) {
   
   position->player = (player_to_check == 0) ? 1 : 0;
 
-  int threatened = isThreatened(position, kingSquare);
-  printf("\nIn incheck, threatened value: %d\n", threatened); 
-  // Restore player
+  int threatened = isThreatened(*position, kingSquare);
+  
   position->player = player_to_check;
 
   return threatened;
 }
 
+struct Square getCastleRook(struct Position* position, struct Move move) {
+    struct Square rook;
+    int dir = (move.end.x > move.start.x) ? 1 : -1;
+    int x = move.start.x + dir;
+    int y = move.start.y;
+
+    while (x >= 0 && x < 8) {
+        if (tolower(position->board[x][y]) == 'r') {
+            rook.x = x;
+            rook.y = y;
+//            printf("Rook %c position: %d|%d\n", getPiece(rook, position), rook.x, rook.y);
+            return rook;
+        }
+        x += dir;
+    }
+    rook.x = -1;
+    rook.y = -1;
+    
+    return rook;
+} 
+
+
+int removeCastling(struct Position* position, struct Square rook) {
+  switch (position->wcastle)
+    {
+    case 0:
+      return 0;
+
+    case 1: // kingside
+      if (rook.x == 7) {
+        return 0;
+      }
+      break;
+
+    case 2: // queenside
+      if (rook.x == 0) {
+        return 0;
+      }
+      break;
+
+    case 3: // both
+      if (rook.x == 7) {
+        return 2;
+      }
+      else if (rook.x == 0) {
+        return 1;
+      }
+      break;
+    }
+    
+    return 0;
+}
+
+void movePiece(struct Position* position, struct Move move) {
+  char piece = getPiece(move.start, position);
+  position->board[move.start.x][move.start.y] = 'X';
+  position->board[move.end.x][move.end.y] = piece;
+  
+  printf("\nmoved piece %c from %d|%d to %d|%d\n", piece, move.start.x, move.start.y, move.end.x, move.end.y);
+}
+
 void makeMove(struct Position* position, struct Move move, int special) { // special: 0 = normal move, 1 = castling 2 = e.p.
+  if (tolower(position->board[move.start.x][move.start.y]) == 'r') {
+  }
   if (!special){
     char piece = position->board[move.start.x][move.start.y];
     position->board[move.start.x][move.start.y] = 'X';
     position->board[move.end.x][move.end.y] = piece;
   }
   else if (special == 1) { // Castling
+    struct Square rook = getCastleRook(position, move);
+    int dir = (move.end.x - move.start.x > 1);
+    movePiece(position, move);
+    struct Move mv2;
+    mv2.start = rook;
+    mv2.end.x = move.start.x + (dir ? 1 : -1);
+    mv2.end.y = move.start.y;
+    movePiece(position, mv2);
+    position->board[rook.x][rook.y] = 'X';
   }
   else if (special == 2) { // En passant
     char piece = position->board[move.start.x][move.start.y];
@@ -242,12 +343,11 @@ void makeMove(struct Position* position, struct Move move, int special) { // spe
   if (move.promotes) {
     promote(position, move);
   }
+  position->player = abs(position->player - 1); //its the other players turn now
 }
 
 
-char getPiece(struct Square sq, struct Position* pos) {
-  return pos->board[sq.x][sq.y];
-}
+
 
 struct Path getPath(struct Move move, int dir) {
   if (dir == 0) {
@@ -256,10 +356,6 @@ struct Path getPath(struct Move move, int dir) {
   else if (dir == 1) {
     return getPathDiagonal(move);
   }
-  struct Path pth;
-  pth.len = 0;
-  pth.squares = NULL;
-  return pth;
 }
 
 int qrsvc(struct Position* position, struct Move move, int owner) { //Queen-Rook-Straight-Validity-Check
@@ -289,50 +385,110 @@ int qbdvc(struct Position* position, struct Move move, int owner) { //Queen-Bish
 }
 
 
-int kvc(struct Position* position, struct Move move, int owner) {
-  
-  if (abs(move.start.x - move.end.x) > 1) { //castling
-    
+int castleCheck(struct Position position, struct Square sq) {
+  if ((getPiece(sq, &position) != 'X')) {
+    return 0; 
+    }
+
+  position.player = abs(position.player - 1);
+
+  if (isThreatened(position, sq)) {
+    return 0;
   }
 
-  int opponent = (owner == 0) ? 1 : 0;
-
-  int original_player = position->player;
-  position->player = opponent;
-
-  int threatened = isThreatened(position, move.end);
-
-  position->player = original_player;
-
-
-  return !threatened;
+  return 1;
 }
 
-int pvc(struct Position* position, struct Move move, int owner) {
-  int dir = (owner == 0) ? 1 : -1; // White (0) moves up (y+1), Black (1) moves down (y-1)
+int kvc(struct Position position, struct Move move, int owner, const int skip_king_check) {
+  int opponent = (owner == 0) ? 1 : 0;
 
-  if (move.start.x == move.end.x) { // Pawn moves straight    
+  int original_player = position.player;
+  position.player = opponent;
+  if (skip_king_check == 0) {
+    int threatened = isThreatened(position, move.end);
+
+    
+    if (threatened) {
+      return 0; 
+    }
+  }
+  position.player = original_player;
+  if (abs(move.start.x - move.end.x) > 1) { //castling
+    struct Square rook = getCastleRook(&position, move);
+    if (rook.x == -1) {
+      return 0; 
+    }
+    const char pc = getPiece(move.start, &position);
+    if (isupper(pc)) { // white
+        if (position.wcastle == 0) {
+          printf("\nno castling rights for white\n");
+          return 0; 
+        }
+        if (move.end.x == 6 && move.start.x == 4 && (position.wcastle == 1 || position.wcastle == 3)) { //kingside
+            for (int i = 5; i < 7; i++) {
+              struct Square sq = {i, move.start.y};
+              if (!castleCheck(position, sq)) {return 0;}
+            }
+        }
+        else if (move.start.x == 4 && move.end.x == 2 && (position.wcastle == 2 || position.wcastle == 3)) { //queenside
+            for (int i = 3; i > 0; i--) {
+              struct Square sq = {i, move.start.y};
+              if (!castleCheck(position, sq)) {return 0;}
+            }
+        }
+    }
+    else {
+      //black 
+      if (position.bcastle == 0) {
+        printf("\nno castling rights for black\n");
+        return 0; 
+      }
+      if (move.start.x == 4 && move.end.x == 6 && (position.bcastle == 1 || position.bcastle == 3)) { //kingside
+        for (int i = 5; i < 7; i++) {
+          struct Square sq = {i, move.start.y};
+          if (!castleCheck(position, sq)) {return 0;}
+        }
+      }
+      else if (move.start.x == 4 && move.end.x == 2 && (position.bcastle == 2 || position.bcastle == 3)) { //queenside
+        for (int i = 3; i > 0; i--) {
+          struct Square sq = {i, move.start.y};
+          if (!castleCheck(position, sq)) {return 0;}
+        }
+      }
+    }
+  }
+
+  return 1;
+
+}
+
+
+
+int pvc(struct Position* position, struct Move move, int owner) {
+  int dir = (owner == 0) ? 1 : -1; 
+
+  if (move.start.x == move.end.x) {     
     if (getPiece(move.end, position) != 'X') {
-      return 0; // Cannot move forward to an occupied square
+      return 0; 
     }
     
-    if (move.end.y - move.start.y == dir) { // Normal 1-square move
+    if (move.end.y - move.start.y == dir) { 
         return 1;
     }
 
-    if (move.end.y - move.start.y == 2 * dir) { // Double move from start
+    if (move.end.y - move.start.y == 2 * dir) {
         int start_rank = (owner == 0) ? 1 : 6;
         if (move.start.y == start_rank) {
             struct Move singleMove = move;
             singleMove.end.y = move.start.y + dir;
-            return qrsvc(position, singleMove, owner); // Check path is clear
+            return qrsvc(position, singleMove, owner); 
         }
     }
     return 0;
   }
   else if ((abs(move.start.x - move.end.x) == 1) && (move.end.y - move.start.y == dir)){ // Pawn captures diagonal
     char dpiece = getPiece(move.end, position);
-    if (dpiece == 'X') {
+    if (dpiece == 'X') { 
       return 0;
     }
     if (!!isupper(dpiece) == owner) {
@@ -344,15 +500,15 @@ int pvc(struct Position* position, struct Move move, int owner) {
 }
 
 
-int validityCheck(struct Position* position, struct Move move, int skip_king_check) {
+int validityCheck(struct Position* position, struct Move move, const int skip_king_check) {
   if (move.end.x < 0 || move.end.x > 7 || move.end.y < 0 || move.end.y > 7) {
     return 0; 
   }
-  if (!skip_king_check) {
+  //printf("\nskip_king_check: %d\n", skip_king_check);
+  if (skip_king_check == 0) {
     struct Position tempPosition = copyPosition(position);
     makeMove(&tempPosition, move, 0);
     if (incheck(&tempPosition)) {
-      printf("\nMove %d|%d -> %d|%d puts king in check, invalid.\n", move.start.x, move.start.y, move.end.x, move.end.y);
       return 0; 
     }
   }
@@ -378,7 +534,7 @@ int validityCheck(struct Position* position, struct Move move, int skip_king_che
     case 'p':
       return pvc(position, move, owner);
     case 'k':
-      return kvc(position, move, owner);
+      return kvc(*position, move, owner, skip_king_check);
     case 'q':
       if (isDiagonalMove(move)) return qbdvc(position, move, owner);
       if (isStraightMove(move)) return qrsvc(position, move, owner);
@@ -564,7 +720,7 @@ void getKnightSquares(struct Path* lines, struct Square piece) {
     }
 }
 
-void genMoves(struct Move* moves, struct Position* position, struct Square piece, int* counter, int skip_king_check) {
+void genMoves(struct Move* moves, struct Position* position, struct Square piece, int* counter, const int skip_king_check) {
   struct Path lines;
   lines.squares = malloc(sizeof(struct Square) * 28);
   lines.len = 0;
@@ -622,7 +778,9 @@ void genMoves(struct Move* moves, struct Position* position, struct Square piece
   free(lines.squares);
 }
 
-struct Move* getMoves(struct Position* position, int* counter, int skip_king_check) {
+
+
+struct Move* getMoves(struct Position* position, int* counter, const int skip_king_check) {
   struct Move* mvs = (struct Move*)calloc(218, sizeof(struct Move));
   struct Square sq;
   for (int i = 0; i < 8; i++) {
@@ -639,16 +797,38 @@ struct Move* getMoves(struct Position* position, int* counter, int skip_king_che
   return mvs;
 }
 
-int isThreatened(struct Position* position, struct Square square) {
+int isThreatened(struct Position position, struct Square square) {
   
   int counter = 0;
-  struct Move* moves = getMoves(position, &counter, 1);
-  printMoves(moves, counter); 
+  struct Move* moves = getMoves(&position, &counter, 1);
   for (int i = 0; i < counter; i++) {
     if (moves[i].end.x == square.x && moves[i].end.y == square.y) {
-      printf("\nThreat found by %d|%d to %d|%d\n", moves[i].start.x, moves[i].start.y, moves[i].end.x, moves[i].end.y);
+      free(moves);
       return 1; 
     }
   }
+  free(moves);
   return 0;
 }
+  
+ 
+
+void buildTree(struct Node* nd, int depth) {
+  if (depth == 0) {
+    return;
+  }
+  struct Position position = nd->position;
+  int counter = 0;
+  struct Move* moves = getMoves(&position, &counter, 0);
+  nd->children = (struct Node*)malloc(sizeof(struct Node) * counter);
+  nd->nchildren = counter;
+  for (int i = 0; i < counter; i++) {
+    nd->children[i].move = moves[i];
+    nd->children[i].position = copyPosition(&position);
+    makeMove(&nd->children[i].position, moves[i], 0);
+    buildTree(&nd->children[i], depth - 1);
+  
+  }
+  free(moves);
+}
+
