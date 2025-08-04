@@ -8,5 +8,7 @@ int main () {
   struct Node node;
   node.position = pos;
   buildTree(&node, 5);
+  printf("\nTree built with %d children\n", node.children[0].nchildren);
+  printPosition(node.children[0].children[0].children[0].position);
   return 0;
 }
