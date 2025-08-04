@@ -19,6 +19,15 @@ struct enPassant enpassant; //e.p. capture square
 };
 
 
+struct SquareState {
+    struct Square square;
+    char piece; 
+};
+
+struct moveReturn {
+    size_t len; // The number of squares in the path
+    struct SquareState* states; // The state of the square after the move
+};
 
 struct Move {
     struct Square start;
