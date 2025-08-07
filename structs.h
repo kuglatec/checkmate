@@ -1,5 +1,5 @@
-#include <stddef.h>
-
+#include <stdint.h>
+#include <stdlib.h>
 struct Square {
     char x;
     char y;
@@ -24,9 +24,16 @@ struct SquareState {
     char piece; 
 };
 
+struct hashSet {
+    uint64_t* hashes;
+    size_t size;
+    size_t capacity;
+};
+
 struct moveReturn {
     size_t len; // The number of squares in the path
-    struct SquareState* states; // The state of the square after the move
+    struct SquareState* states;
+    struct enPassant enpassant; // original en passant struct
 };
 
 struct Move {
