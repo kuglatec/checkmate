@@ -1,98 +1,16 @@
 #include <string.h>
 #include "structs.h"
+#include "zobrist.c"
+#include "pst.c"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+#define INFINITY 1000000
+#define NEG_INFINITY -1000000
+
 const char wpromotions[4] = "QRBN";
 const char bpromotions[4] = "qrbn";
-
-
-uint64_t zobrist_pieces[64][12];
-uint64_t zobrist_side;
-
-
-int pieceToIndex(const char piece) {
-  switch (piece) {
-    case 'P': return 0;  case 'p': return 1;
-    case 'N': return 2;  case 'n': return 3;
-    case 'B': return 4;  case 'b': return 5;
-    case 'R': return 6;  case 'r': return 7;
-    case 'Q': return 8;  case 'q': return 9;
-    case 'K': return 10; case 'k': return 11;
-    default: return -1;
-  }
-}
-
-void initZobrist() {
-  uint64_t seed = 1070372;
-
-  for (int sq = 0; sq < 64; sq++) {
-    for (int piece = 0; piece < 12; piece++) {
-      seed = seed * 1103515245 + 12345;
-      zobrist_pieces[sq][piece] = seed;
-    }
-  }
-
-  seed = seed * 1103515245 + 12345;
-  zobrist_side = seed;
-}
-
-int64_t hashPosition(const struct Position* pos) {
-  uint64_t hash = 0;
-
-  //pieces
-  for (int file = 0; file < 8; file++) {
-    for (int rank = 0; rank < 8; rank++) {
-      char piece = pos->board[file][rank];
-      if (piece != 'X') {
-        int square = rank * 8 + file;
-        int pieceIdx = pieceToIndex(piece);
-        if (pieceIdx >= 0) {
-          hash ^= zobrist_pieces[square][pieceIdx];
-        }
-      }
-    }
-  }
-
-  //player
-  if (pos->player == 1) {
-    hash ^= zobrist_side;
-  }
-
-  return hash;
-}
-
-struct hashSet* createHashSet(const size_t initialCapacity) { //create the hash set
-  struct hashSet* set = malloc(sizeof(struct hashSet));
-  set->hashes = malloc(sizeof(uint64_t) * initialCapacity);
-  set->size = 0;
-  set->capacity = initialCapacity;
-  return set;
-}
-
-void freeHashSet(struct hashSet* set) { //macro for freeing a hash set
-  free(set->hashes);
-  free(set);
-}
-
-int containsHash(const struct hashSet* set, const uint64_t hash) { //check hash set for hash
-  for (size_t i = 0; i < set->size; i++) {
-    if (set->hashes[i] == hash) {
-      return 1; //hash found in hashset
-    }
-  }
-  return 0;
-}
-
-void addHash(struct hashSet* set, const uint64_t hash) {
-  if (set->size >= set->capacity) {
-    set->capacity *= 2;
-    set->hashes = realloc(set->hashes, sizeof(uint64_t) * set->capacity);
-  }
-  set->hashes[set->size] = hash;
-  set->size++;
-}
 
 int isThreatened(struct Position position, struct Square square);
 
@@ -170,6 +88,48 @@ struct Position FENtoPosition(const char* fen) {
     return position;
 } 
 
+
+struct Move notationToMove(const char* notation, size_t len) {
+  for (int i = 0; i < len; i++) {
+    printf("%c", notation[i]);
+  }
+  struct Move move = {{-1, -1}, {-1, -1}, 'X'};
+  if (len < 4) return move;
+
+  move.start.x = notation[0] - 'a';
+  move.start.y = notation[1] - '1';
+
+  
+  move.end.x = notation[2] - 'a';
+  move.end.y = notation[3] - '1';
+
+  //promotion
+  if (len == 6) {
+    move.promotion = notation[5];
+  }
+
+  return move;
+}
+
+struct Move* notationsToMoves(const char* notation, size_t len, int *sc) {
+  for (int i = 0; i <= len; i++) {
+    if (notation[i] == ' ') {
+      (*sc)++;
+    }
+  }
+  struct Move* moves = malloc(sizeof(struct Move) * (*sc));
+  for (int i = 0; i < *sc; i++) {
+    while (*notation == ' ') notation++;
+    size_t move_len = 0;
+    while (notation[move_len] != ' ' && notation[move_len] != '\0') {
+      move_len++;
+    }
+    moves[i] = notationToMove(notation, move_len);
+    notation += move_len;
+  }
+  return moves;
+}
+
 char getPiece(const struct Square sq, const struct Position* pos) {
   if (sq.x >= 0 && sq.x < 8 && sq.y >= 0 && sq.y < 8) {
     return pos->board[sq.x][sq.y];
@@ -188,9 +148,6 @@ int getSpecialMoveType(const struct Position* pos, const struct Move move) {
   }
   return 0;
 }
-
-
-
 
 void ApplyCastlingRights(const char* fen, struct Position *position) {
   int spaceCount = 0;
@@ -1064,6 +1021,52 @@ int isThreatened(struct Position position, struct Square square) {
   return 0;
 }
 
+double getLoadFactor(const struct fastHashTable* ht) {
+    return (double)ht->entries / ht->size;
+}
+
+// Print hash table stats
+void printHashTableStats(const struct fastHashTable* ht) {
+    printf("Hash table stats:\n");
+    printf("  Size: %zu entries\n", ht->size);
+    printf("  Used: %zu entries\n", ht->entries);
+    printf("  Load factor: %.2f%%\n", getLoadFactor(ht) * 100);
+}
+
+
+
+int getMaterialValue(const struct Position position) {
+  int value = 0;  
+  for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            char piece = position.board[i][j];
+            if (piece == 'X') continue; 
+            switch (piece) {
+                case 'p': value -= 100; break;
+                case 'n': value -= 320; break;
+                case 'b': value -= 330; break;
+                case 'r': value -= 500; break;
+                case 'q': value -= 900; break;
+                case 'k': value -= 10000; break;
+                case 'P': value += 100; break;
+                case 'N': value += 320; break;
+                case 'B': value += 330; break;
+                case 'R': value += 500; break;
+                case 'Q': value += 900; break;
+                case 'K': value += 10000; break;
+            }
+        }
+    }
+    return value;
+}
+
+
+int getValue(const struct Position position) {
+  int value = 0;
+  value += getMaterialValue(position);
+  return value;
+}
+
 
 
 /*
@@ -1089,41 +1092,93 @@ void buildTree(struct Node* nd, int depth) {
   }
   free(moves);
 }
-
 */
-void buildTreeWithHashCheck(struct Node* nd, const int depth, struct hashSet* seen_positions) {
-  if (depth == 0) {
-    return;
+void buildTreeFast(struct Node* nd, int depth, struct fastHashTable* seen_positions) {
+    if (depth == 0) {
+        return;
+    }
+    
+    uint64_t posHash = hashPosition(&nd->position);
+    
+    if (containsFastHash(seen_positions, posHash)) {
+        nd->nchildren = 0;
+        nd->children = NULL;
+        return;
+    }
+    
+    addFastHash(seen_positions, posHash);
+    
+    struct Position position = nd->position;
+    int counter = 0;
+    struct Square target = {-1, -1};
+    struct Move* moves = getMoves(&position, &counter, 0, target);
+    
+    nd->children = (struct Node*)malloc(sizeof(struct Node) * counter);
+    nd->nchildren = counter;
+
+    for (int i = 0; i < counter; i++) {
+        nd->children[i].move = moves[i];
+        nd->children[i].position = copyPosition(&position);
+        makeMove(&nd->children[i].position, moves[i], getSpecialMoveType(&nd->position, moves[i]));
+     //   nd->children[i].eval = getValue(nd->children[i].position);
+        buildTreeFast(&nd->children[i], depth - 1, seen_positions);
+    }
+    
+    free(moves);
+    
+}
+
+
+int alphabeta(struct Node* node, int depth, int alpha, int beta, int max) {
+  
+  if (/*node->nchildren == 0 || */depth == 0) {
+    node->eval = getValue(node->position);
+    return node->eval;
   }
 
-  const uint64_t posHash = hashPosition(&nd->position);
-
-//check if position is already hashed
-  if (containsHash(seen_positions, posHash)) {
-    nd->nchildren = 0;
-    nd->children = NULL;
-    return; // Cut the branch!
+  if (max) { //maximizing player
+    int max_eval = -INFINITY;
+    for (int i = 0; i < node->nchildren; i++) {
+      int eval = alphabeta(&node->children[i], depth - 1, alpha, beta, 0);
+      if (eval > max_eval) {
+        max_eval = eval;
+      }
+      alpha = (alpha > eval) ? alpha : eval;
+      if (beta <= alpha) {
+        break; //prune
+      }
+    }
+    node->eval = max_eval;
+    return max_eval;
+  }
+  else { //minimizing player
+    int min_eval = INFINITY;
+    for (int i = 0; i < node->nchildren; i++) {
+      int eval = alphabeta(&node->children[i], depth - 1, alpha, beta, 1);
+      if (eval < min_eval) {
+        min_eval = eval;
+      }
+      beta = (beta < eval) ? beta : eval;
+      if (beta <= alpha) {
+        break; //prune
+      }
+    }
+    node->eval = min_eval;
+    return min_eval;
   }
 
-//add positions hash to hash set
-  addHash(seen_positions, posHash);
+}
 
-  struct Position position = nd->position;
-  int counter = 0;
-  struct Square target = {-1, -1};
-  struct Move* moves = getMoves(&position, &counter, 0, target);
 
-  nd->children = (struct Node*)malloc(sizeof(struct Node) * counter);
-  nd->nchildren = counter;
-
-  for (int i = 0; i < counter; i++) {
-    nd->children[i].move = moves[i];
-    nd->children[i].position = copyPosition(&position);
-    makeMove(&nd->children[i].position, moves[i],
-             getSpecialMoveType(&nd->position, moves[i]));
-
-    buildTreeWithHashCheck(&nd->children[i], depth - 1, seen_positions);
+struct Move getBestMove(struct Node* node, int depth) {
+  struct Move best_move;
+  int best_eval = -INFINITY;
+  for (int i = 0; i < node->nchildren; i++) {
+    int eval = alphabeta(&node->children[i], depth - 1, -INFINITY, INFINITY, 0);
+    if (eval > best_eval) {
+      best_eval = eval;
+      best_move = node->children[i].move;
+    }
   }
-
-  free(moves);
+  return best_move;
 }
