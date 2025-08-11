@@ -1,35 +1,133 @@
-#include "engine.c"
 #include <stdio.h>
-#define FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-/*
-int main () {
-  struct Position pos = FENtoPosition(FEN);
-  ApplyCastlingRights(FEN, &pos);
-  ApplyEnpassantTarget(FEN, &pos);
-    struct Node node;
-  node.position = pos;
-  buildTree(&node, 5);
- // printf("\nTree built with %d children\n", node.children[0].nchildren;
+#include <string.h>
+#include <stdlib.h>
+#include "engine.c"
+#define LINE_MAX 1024
+#define DEFAULT_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-printTree(node, 5);
-  return 0;
+
+static void handle_uci() {
+    printf("id name checkmate\n");
+    printf("id author kuglatec\n");
+    printf("uciok\n");
+    fflush(stdout);
 }
-*/
-int main() {
-  initZobrist();
 
-  struct Position pos = FENtoPosition(FEN);
-  ApplyCastlingRights(FEN, &pos);
-  ApplyEnpassantTarget(FEN, &pos);
+static void handle_isready() {
+    printf("readyok\n");
+    fflush(stdout);
+}
 
-  struct hashSet* seen = createHashSet(10000); // Start with space for 10k positions
+static void handle_position(const char *args, struct Position *position) {
+    if (strstr(args, "startpos") == args) {
+        *position = FENtoPosition(DEFAULT_FEN);
+        ApplyCastlingRights(DEFAULT_FEN, position);
+        ApplyEnpassantTarget(DEFAULT_FEN, position);
+        printf("info position: startpos\n");
+        const char *moves = strstr(args, "moves");
+        if (moves) {
+            printf("info position: startpos with moves\n");
+            moves += strlen("moves");
+            while (*moves == ' ') moves++;
+            if (*moves) {
+                      printf("info parsed moves: %s\n", moves);
+                      int sc = 1;
+                      struct Move* mvs = notationsToMoves(moves, strlen(moves), &sc);
+                      for (int i = 0; i < sc; i++) {
+                          movePiece(position, mvs[i]);
+                      }
+                    free(mvs);
+            }
+        }
+        
+    } else if (strncmp(args, "fen", 3) == 0) {
+        const char *moves = strstr(args, "moves");
+        if (moves) {
+            size_t fenlen = (size_t)(moves - args);
+            char *fen = malloc(fenlen + 1);
+            if (fen) {
+                strncpy(fen, args, fenlen);
+                fen[fenlen] = '\0';
+                *position = FENtoPosition(fen + 4);
+                ApplyCastlingRights(fen, position);
+                ApplyEnpassantTarget(fen, position);
+                free(fen);
+            }
+            moves += strlen("moves");
+            while (*moves == ' ') moves++;
+            if (*moves) printf("info parsed moves: %s\n", moves);
+            int sc = 1;
+                      struct Move* mvs = notationsToMoves(moves, strlen(moves), &sc);
+                      for (int i = 0; i < sc; i++) {
+                          movePiece(position, mvs[i]);
+                      }
+                    free(mvs);
+        } else {
+            *position = FENtoPosition(args + 4);
+            ApplyCastlingRights(args + 4, position);
+            ApplyEnpassantTarget(args + 4, position);
+        }
+    } 
+    fflush(stdout);
+}
 
-  struct Node node;
-  node.position = pos;
-  buildTreeWithHashCheck(&node, 6, seen);
+static void handle_go(const char *args, struct Position *pos) {
+    (void)args; 
 
-  printf("Total unique positions seen: %zu\n", seen->size);
+    initZobrist(); 
 
-  freeHashSet(seen);
-  return 0;
+    struct fastHashTable* seen = createFastHashTable(16);
+    
+    struct Node node;
+    node.position = *pos; 
+    
+    buildTreeFast(&node, 5, seen);
+
+    struct Move bestmove = getBestMove(&node, 5);
+    printf("bestmove %c%d%c%d\n", 
+           bestmove.start.x + 'a', bestmove.start.y + 1, 
+           bestmove.end.x + 'a', bestmove.end.y + 1);
+    fflush(stdout);
+}
+
+int main(void) {
+    struct Position position;
+    char line[LINE_MAX];
+    printf("Ready to accept UCI commands.\n");
+    fflush(stdout);
+
+    while (fgets(line, sizeof(line), stdin)) {
+        size_t len = strlen(line);
+        if (len && (line[len-1] == '\n' || line[len-1] == '\r')) {
+            while (len && (line[len-1] == '\n' || line[len-1] == '\r')) {
+                line[--len] = '\0';
+            }
+        }
+        if (len == 0) continue;
+
+        if (strcmp(line, "uci") == 0) {
+            handle_uci();
+        } else if (strcmp(line, "isready") == 0) {
+            handle_isready();
+        } else if (strcmp(line, "ucinewgame") == 0) {
+        
+        } else if (strncmp(line, "setoption", 9) == 0) {
+          
+        } else if (strncmp(line, "position", 8) == 0) {
+            const char *args = line + 8;
+            while (*args == ' ') args++;
+            handle_position(args, &position);
+        } else if (strncmp(line, "go", 2) == 0) {
+            const char *args = line + 2;
+            while (*args == ' ') args++;
+            handle_go(args, &position);
+        } else if (strcmp(line, "quit") == 0) {
+            break;
+        } else {
+            printf("info unknown command: %s\n", line);
+            fflush(stdout);
+        }
+    }
+
+    return 0;
 }
