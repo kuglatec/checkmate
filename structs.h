@@ -1,5 +1,4 @@
-#include <stdint.h>
-#include <stdlib.h>
+#pragma once
 struct Square {
     char x;
     char y;
@@ -10,6 +9,7 @@ struct enPassant {
     struct Square square; 
 };
 
+
 struct Position {
 int player; //The player to make his move. Black = 0, White = 1
 int wcastle; // Castle rights for white. 0 = no castling, 1 = kingside, 2 = queenside 3 = both.
@@ -19,20 +19,21 @@ struct enPassant enpassant; //e.p. capture square
 };
 
 
+
 struct SquareState {
     struct Square square;
     char piece; 
 };
 
-struct hashSet {
-    uint64_t* hashes;
-    size_t size;
-    size_t capacity;
+
+struct AlphaBeta {
+    int alpha;
+    int beta;
 };
 
 struct moveReturn {
-    size_t len; // The number of squares in the path
-    struct SquareState* states;
+    size_t len; //number of squares in the path
+    struct SquareState states[4];
     struct enPassant enpassant; // original en passant struct
 };
 
@@ -43,12 +44,7 @@ struct Move {
     char promotion; // Defines what the piece promotes to by char
 };
 
-struct Node {
-    struct Position position;
-    struct Move move;
-    int nchildren;
-    struct Node *children;
-};
+
 
 struct Path {
     size_t len;
