@@ -23,23 +23,21 @@ static void handle_position(const char *args, struct Position *position) {
         *position = FENtoPosition(DEFAULT_FEN);
         ApplyCastlingRights(DEFAULT_FEN, position);
         ApplyEnpassantTarget(DEFAULT_FEN, position);
-        printf("info position: startpos\n");
         const char *moves = strstr(args, "moves");
         if (moves) {
-            printf("info position: startpos with moves\n");
             moves += strlen("moves");
             while (*moves == ' ') moves++;
             if (*moves) {
-                      printf("info parsed moves: %s\n", moves);
                       int sc = 1;
                       struct Move* mvs = notationsToMoves(moves, strlen(moves), &sc);
                       for (int i = 0; i < sc; i++) {
-                          movePiece(position, mvs[i]);
+
+                          makeMove(position, mvs[i], getSpecialMoveType(position, mvs[i]));
                       }
                     free(mvs);
             }
         }
-        
+
     } else if (strncmp(args, "fen", 3) == 0) {
         const char *moves = strstr(args, "moves");
         if (moves) {
@@ -55,38 +53,40 @@ static void handle_position(const char *args, struct Position *position) {
             }
             moves += strlen("moves");
             while (*moves == ' ') moves++;
-            if (*moves) printf("info parsed moves: %s\n", moves);
             int sc = 1;
-                      struct Move* mvs = notationsToMoves(moves, strlen(moves), &sc);
-                      for (int i = 0; i < sc; i++) {
-                          movePiece(position, mvs[i]);
-                      }
-                    free(mvs);
+            struct Move* mvs = notationsToMoves(moves, strlen(moves), &sc);
+            for (int i = 0; i < sc; i++) {
+                makeMove(position, mvs[i], getSpecialMoveType(position, mvs[i]));
+
+            }
+            free(mvs);
         } else {
             *position = FENtoPosition(args + 4);
             ApplyCastlingRights(args + 4, position);
             ApplyEnpassantTarget(args + 4, position);
         }
-    } 
+    }
     fflush(stdout);
 }
 
+
 static void handle_go(const char *args, struct Position *pos) {
-    (void)args; 
+    (void)args;
+    printf("\nhash: %lu\n", hash_position(pos));
+    struct Move bestmove = getBestMoveNegamax(pos, 6);
 
-    initZobrist(); 
+    if (bestmove.start.x == -1) {
+        printf("bestmove 0000\n");
+    } else {
+        printf("bestmove %c%d%c%d",
+               bestmove.start.x + 'a', bestmove.start.y + 1,
+               bestmove.end.x + 'a', bestmove.end.y + 1);
 
-    struct fastHashTable* seen = createFastHashTable(16);
-    
-    struct Node node;
-    node.position = *pos; 
-    
-    buildTreeFast(&node, 5, seen);
-
-    struct Move bestmove = getBestMove(&node, 5);
-    printf("bestmove %c%d%c%d\n", 
-           bestmove.start.x + 'a', bestmove.start.y + 1, 
-           bestmove.end.x + 'a', bestmove.end.y + 1);
+        if (bestmove.promotes) {
+            printf("%c", bestmove.promotion);
+        }
+        printf("\n");
+    }
     fflush(stdout);
 }
 
@@ -110,9 +110,9 @@ int main(void) {
         } else if (strcmp(line, "isready") == 0) {
             handle_isready();
         } else if (strcmp(line, "ucinewgame") == 0) {
-        
+
         } else if (strncmp(line, "setoption", 9) == 0) {
-          
+
         } else if (strncmp(line, "position", 8) == 0) {
             const char *args = line + 8;
             while (*args == ' ') args++;
