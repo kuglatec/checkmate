@@ -72,8 +72,14 @@ static void handle_position(const char *args, struct Position *position) {
 
 static void handle_go(const char *args, struct Position *pos) {
     (void)args;
-    printf("\nhash: %lu\n", hash_position(pos));
-    struct Move bestmove = getBestMoveNegamax(pos, 6);
+  //  printf("\nhash: %lu\n", hash_position(pos));
+
+  //  struct Move bestmove = getBestMoveNegamax(pos, 5);
+    //printPosition(*pos);
+    struct HashTable* ht = createHashTable(1024); //1gb table size
+    struct Move bestmove = /*getBestMoveWithHash(pos, 6, ht);*/getBestMoveWithKillers(pos, 8, ht);
+    printf("\nhas zugzwang: %d\n", hasZugzwang(*pos));
+    //struct Move bestmove = getBestMoveWithHash(pos, 5, hashTable);
 
     if (bestmove.start.x == -1) {
         printf("bestmove 0000\n");
