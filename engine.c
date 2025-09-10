@@ -1,12 +1,16 @@
 #include <string.h>
 #include "structs.h"
-#include "zobrist.c"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <stdint.h>
+#include <time.h>
 #define INFINITY 1000000
 #define NEG_INFINITY -1000000
+#define HASH_EXACT       0
+#define HASH_LOWER_BOUND 1  //alphacuttof
+#define HASH_UPPER_BOUND 2  //beta cutoff
+#define MAX_PIECES 17
 
 const char wpromotions[4] = "QRBN";
 const char bpromotions[4] = "qrbn";
@@ -23,10 +27,11 @@ struct Position copyPosition(const struct Position* original) {
     return copy;
 }
 
-
 struct Position FENtoPosition(const char* fen) {
     struct Position position;
-    // Initialize board to '.'
+    position.bcastled = 0;
+    position.wcastled = 0;
+
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
             position.board[i][j] = '.';
@@ -420,10 +425,8 @@ int epValid(const struct Position* position, const struct Move move) {
 
 }
 
-
 struct moveReturn makeMove(struct Position* position, const struct Move move, const int special) { // special: 0 = normal move, 1 = castling 2 = e.p.
   struct moveReturn ret;
-
   ret.states[0].square = move.start;
   ret.states[0].piece = position->board[move.start.x][move.start.y];
   ret.states[1].square = move.end;
@@ -438,6 +441,16 @@ struct moveReturn makeMove(struct Position* position, const struct Move move, co
     ret.states[3].square.y = move.start.y;
     ret.states[3].piece = position->board[ret.states[3].square.x][ret.states[3].square.y];
     ret.len = 4;
+    ret.wcastled = position->wcastled;
+    ret.bcastled = position->bcastled;
+    if (position->player == 0)
+    {
+      position->wcastled ^= position->wcastled;
+    }
+    else if (position->player == 1)
+    {
+      position->bcastle ^= position->bcastled;
+    }
   }
   else if (special == 2) { //en passant
     ret.states[2].square.x = move.end.x;
@@ -708,7 +721,58 @@ int validityCheck(const struct Position* position, struct Move move, const int s
   return 0;
 }
 
+struct KillerTable* createKillerTable() {
+  struct KillerTable* table = calloc(1, sizeof(struct KillerTable));
 
+  for (int ply = 0; ply < 64; ply++) {
+    for (int slot = 0; slot < 2; slot++) {
+      table->killers[ply][slot].start.x = -1;
+      table->killers[ply][slot].start.y = -1;
+      table->killers[ply][slot].end.x = -1;
+      table->killers[ply][slot].end.y = -1;
+      table->killers[ply][slot].promotes = 0;
+      table->killers[ply][slot].promotion = '.';
+    }
+  }
+  return table;
+}
+
+int moves_equal(struct Move a, struct Move b) {
+  return (a.start.x == b.start.x && a.start.y == b.start.y &&
+          a.end.x == b.end.x && a.end.y == b.end.y &&
+          a.promotes == b.promotes && a.promotion == b.promotion);
+}
+
+int isValidKiller(struct Move move) {
+  return (move.start.x != -1 && move.start.y != -1);
+
+}
+
+int isQuietMove(const struct Position* pos, struct Move move) {
+  return (getPiece(move.end, pos) == '.' && !move.promotes);
+}
+
+void updateKillers(struct KillerTable* killers, int ply, struct Move move, const struct Position* pos) {
+  if (!isQuietMove(pos, move)) {
+    return;
+  }
+
+  if (ply >= 64 || ply < 0) {
+    return;
+  }
+
+  if (moves_equal(killers->killers[ply][0], move)) {
+    return;
+  }
+
+  killers->killers[ply][1] = killers->killers[ply][0];
+  killers->killers[ply][0] = move;
+}
+
+struct Move getKillerMove(struct KillerTable* killers, int ply)
+{
+
+}
 
 int valid(struct Position* position, struct Move move, const int skip_king_check, int castle) {
   if (validityCheck(position, move, skip_king_check, castle)) {
@@ -716,6 +780,7 @@ int valid(struct Position* position, struct Move move, const int skip_king_check
       const int special_type = getSpecialMoveType(position, move);
       const struct moveReturn ret = makeMove(position, move, special_type);
       if (incheck(position)) {
+
         undoMove(position, ret);
         return 0;
       }
@@ -991,7 +1056,7 @@ void genMoves(struct Move* moves, struct Position* position, struct Square piece
 
 }
 
-inline int getPieceValue(const char piece) {
+extern inline int getPieceValue(const char piece) {
   switch (piece | 32) {
     case 'p': return 100;
     case 'n': return 320;
@@ -1045,10 +1110,10 @@ int quickMoveScore(const struct Position* position, struct Move move) {
 
 
 void getMoves(struct Position* position, int* counter, const int skip_king_check, const int castle, const int onlyCount, int skipPawns, struct Move* mvs) {
-
+  struct Square squares[28];
   struct Path lines;
-  mallocCounter++;
-  lines.squares = malloc(sizeof(struct Square) * 28);
+  lines.len = 0;
+  lines.squares = squares;
   struct Square sq;
 
   *counter = 0;
@@ -1066,7 +1131,6 @@ void getMoves(struct Position* position, int* counter, const int skip_king_check
     }
   }
 
-  free(lines.squares);
 
   if (!onlyCount && *counter > 1) {
     for (int i = 1; i < *counter; i++) {
@@ -1082,11 +1146,8 @@ void getMoves(struct Position* position, int* counter, const int skip_king_check
     }
   }
 }
-
-
-void getMoves_withOrdering(struct Position* position, struct Move* moves, int* counter) {
+void getMoves_withOrdering(struct Position* position, struct Move* moves, int* counter, struct KillerTable* killers, int ply) {
     getMoves(position, counter, 0, 0, 0, 0, moves);
-
 
     int scores[218];
     for (int i = 0; i < *counter; i++) {
@@ -1095,26 +1156,29 @@ void getMoves_withOrdering(struct Position* position, struct Move* moves, int* c
         char victim = getPiece(moves[i].end, position);
         char attacker = getPiece(moves[i].start, position);
 
-        // Captures (wichtigste Verbesserung!)
         if (victim != '.') {
             int victim_val = getPieceValue(victim);
             int attacker_val = getPieceValue(attacker);
 
-            // MVV-LVA: Wertvollstes Opfer zuerst, billigster Angreifer zuerst
             scores[i] += victim_val * 100 + (1000 - attacker_val);
 
-            // Extra Bonus für gewinnende Captures
             if (victim_val >= attacker_val) {
                 scores[i] += 10000;
             }
         }
 
-        // Promotions
         if (moves[i].promotes) {
             scores[i] += getPieceValue(moves[i].promotion) * 10 + 5000;
         }
 
-        // Castling
+        if (ply >= 0 && ply < 64) {
+            if (moves_equal(moves[i], killers->killers[ply][0])) {
+                scores[i] += 2000; // Erster Killer
+            } else if (moves_equal(moves[i], killers->killers[ply][1])) {
+                scores[i] += 1000; // Zweiter Killer
+            }
+        }
+
         if (getSpecialMoveType(position, moves[i]) == 1) {
             scores[i] += 100;
         }
@@ -1123,7 +1187,8 @@ void getMoves_withOrdering(struct Position* position, struct Move* moves, int* c
         scores[i] += (7 - center_dist) * 5;
     }
 
-    for (int i = 0; i < *counter - 1; i++) {
+//sort
+  for (int i = 0; i < *counter - 1; i++) {
         int max_idx = i;
         for (int j = i + 1; j < *counter; j++) {
             if (scores[j] > scores[max_idx]) {
@@ -1131,10 +1196,12 @@ void getMoves_withOrdering(struct Position* position, struct Move* moves, int* c
             }
         }
         if (max_idx != i) {
+            // Tausche Moves
             struct Move temp_move = moves[i];
             moves[i] = moves[max_idx];
             moves[max_idx] = temp_move;
 
+            // Tausche Scores
             int temp_score = scores[i];
             scores[i] = scores[max_idx];
             scores[max_idx] = temp_score;
@@ -1142,25 +1209,88 @@ void getMoves_withOrdering(struct Position* position, struct Move* moves, int* c
     }
 }
 
+
+static const int knight_offsets[8][2] = {
+  {1,2}, {1,-2}, {-1,2}, {-1,-2}, {2,1}, {2,-1}, {-2,1}, {-2,-1}
+};
+// Pre-computed king move offsets
+static const int king_offsets[8][2] = {
+    {-1,-1}, {-1,0}, {-1,1}, {0,-1}, {0,1}, {1,-1}, {1,0}, {1,1}
+};
+
 int isThreatened(struct Position position, struct Square target) {
-  for (int i = 0; i < 8; i++) {
-    for (int j = 0; j < 8; j++) {
-      char pc = position.board[i][j];
-      if (pc == '.') {
-        continue;
-      }
-      else if (isupper(pc) == position.player) {
-        struct Move mv;
-        mv.start.x = i;
-        mv.start.y = j;
-        mv.end = target;
-        if (validityCheck(&position, mv, 0, 0)) {
-          return 1;
-        }
-      }
+    const int opponent = position.player;
+    const char enemy_pieces[6] = {
+        (opponent == 0) ? 'P' : 'p', // pawn
+        (opponent == 0) ? 'N' : 'n', // knight
+        (opponent == 0) ? 'B' : 'b', // bishop
+        (opponent == 0) ? 'R' : 'r', // rook
+        (opponent == 0) ? 'Q' : 'q', // queen
+        (opponent == 0) ? 'K' : 'k'  // king
+    };
+
+    // Pawn attacks
+    const int pawn_dir = (opponent == 0) ? 1 : -1;
+    const int pawn_rank = target.y - pawn_dir;
+    if (pawn_rank >= 0 && pawn_rank < 8) {
+        if (target.x > 0 && position.board[target.x - 1][pawn_rank] == enemy_pieces[0]) return 1;
+        if (target.x < 7 && position.board[target.x + 1][pawn_rank] == enemy_pieces[0]) return 1;
     }
-  }
-  return 0;
+
+    // Knight attacks
+    for (int i = 0; i < 8; i++) {
+        const int x = target.x + knight_offsets[i][0];
+        const int y = target.y + knight_offsets[i][1];
+        if (x >= 0 && x < 8 && y >= 0 && y < 8) {
+            if (position.board[x][y] == enemy_pieces[1]) return 1;
+        }
+    }
+
+    // King attacks
+    for (int i = 0; i < 8; i++) {
+        const int x = target.x + king_offsets[i][0];
+        const int y = target.y + king_offsets[i][1];
+        if (x >= 0 && x < 8 && y >= 0 && y < 8) {
+            if (position.board[x][y] == enemy_pieces[5]) return 1;
+        }
+    }
+
+    // Sliding piece attacks (optimized ray casting)
+    // Horizontal/Vertical (Rook/Queen)
+    static const int straight_dirs[4][2] = {{0,1}, {0,-1}, {1,0}, {-1,0}};
+    for (int d = 0; d < 4; d++) {
+        const int dx = straight_dirs[d][0];
+        const int dy = straight_dirs[d][1];
+
+        for (int x = target.x + dx, y = target.y + dy;
+             x >= 0 && x < 8 && y >= 0 && y < 8;
+             x += dx, y += dy) {
+            const char piece = position.board[x][y];
+            if (piece != '.') {
+                if (piece == enemy_pieces[3] || piece == enemy_pieces[4]) return 1;
+                break;
+            }
+        }
+    }
+
+    // Diagonal (Bishop/Queen)
+    static const int diag_dirs[4][2] = {{1,1}, {1,-1}, {-1,1}, {-1,-1}};
+    for (int d = 0; d < 4; d++) {
+        const int dx = diag_dirs[d][0];
+        const int dy = diag_dirs[d][1];
+
+        for (int x = target.x + dx, y = target.y + dy;
+             x >= 0 && x < 8 && y >= 0 && y < 8;
+             x += dx, y += dy) {
+            const char piece = position.board[x][y];
+            if (piece != '.') {
+                if (piece == enemy_pieces[2] || piece == enemy_pieces[4]) return 1;
+                break;
+            }
+        }
+    }
+
+    return 0;
 }
 
 int getMaterialValue(const struct Position position) {
@@ -1219,77 +1349,18 @@ int getValue(const struct Position position) {
   v -= getCenterValue(newposition);
   v -= getMobility(newposition);
   v += getDoublePawns(position);
+
+  if (!position.wcastled && position.wcastle == 0)
+  {
+    v = v - 125;
+  }
+  else if (!position.bcastled && position.bcastle == 0)
+  {
+    v = v + 125;
+  }
   return v;
 }
-int negamax(struct Position* pos, int depth, int alpha, int beta) {
-  if (depth == 0) {
-    int eval = getValue(*pos);
-    return pos->player == 0 ? eval : -eval;
-  }
 
-  int counter = 0;
-  struct Move moves[218];
-
-  getMoves_withOrdering(pos, moves, &counter);
-
-  int best = -INFINITY;
-
-  for (int i = 0; i < counter; i++) {
-    struct Position new_pos = copyPosition(pos);
-    makeMove(&new_pos, moves[i], getSpecialMoveType(pos, moves[i]));
-
-    int eval = -negamax(&new_pos, depth - 1, -beta, -alpha);
-
-    if (eval > best) {
-      best = eval;
-    }
-
-    if (eval > alpha) {
-      alpha = eval;
-    }
-
-    if (alpha >= beta) {
-      break;
-    }
-  }
-
-  return best;
-}
-
-struct Move getBestMoveNegamax(struct Position* pos, int depth) {
-    int alpha = -INFINITY;
-    int beta = INFINITY;
-    int best_eval = -INFINITY;
-    struct Move best_move = {{-1, -1}, {-1, -1}, 0, '.'};
-
-    int counter = 0;
-    struct Move moves[218];
-    getMoves(pos, &counter, 0, 0, 0, 0, moves);
-
-    fflush(stdout);
-
-    for (int i = 0; i < counter; i++) {
-        struct Position new_pos = copyPosition(pos);
-        makeMove(&new_pos, moves[i], getSpecialMoveType(pos, moves[i]));
-
-        int eval = -negamax(&new_pos, depth - 1, -beta, -alpha);
-
-
-        if (eval > best_eval) {
-            best_eval = eval;
-            best_move = moves[i];
-        }
-
-        if (eval > alpha) {
-            alpha = eval;
-        }
-    }
-
-
-    fflush(stdout);
-
-    return best_move;
-}
 
 int getNumberOfMoves(struct Position pos, const int skipPawns) {
   int counter = 0;
@@ -1300,4 +1371,479 @@ int getNumberOfMoves(struct Position pos, const int skipPawns) {
 
 int getMobility(struct Position position) {
   return getNumberOfMoves(position, 1) * 10;
+}
+
+
+static uint64_t piece_keys[8][8][12];  // [file][rank][piece_type]
+static uint64_t castle_keys[16];       //castling
+static uint64_t enpassant_keys[8];     //ep
+static uint64_t player_key;            //player
+static int zobrist_initialized = 0;
+
+int piece_to_index(char piece) {
+    switch (piece) {
+    case 'P': return 0;
+    case 'N': return 1;
+    case 'B': return 2;
+    case 'R': return 3;
+    case 'Q': return 4;
+    case 'K': return 5;
+    case 'p': return 6;
+    case 'n': return 7;
+    case 'b': return 8;
+    case 'r': return 9;
+    case 'q': return 10;
+    case 'k': return 11;
+    default: return -1;
+    }
+}
+
+
+void init_zobrist() {
+    if (zobrist_initialized) return;
+
+    srand((unsigned int)time(NULL));
+
+
+    for (int file = 0; file < 8; file++) {
+        for (int rank = 0; rank < 8; rank++) {
+            for (int piece = 0; piece < 12; piece++) {
+                piece_keys[file][rank][piece] =
+                    ((uint64_t)rand() << 32) | (uint64_t)rand();
+            }
+        }
+    }
+
+    for (int i = 0; i < 16; i++) {
+        castle_keys[i] = ((uint64_t)rand() << 32) | (uint64_t)rand();
+    }
+
+    for (int file = 0; file < 8; file++) {
+        enpassant_keys[file] = ((uint64_t)rand() << 32) | (uint64_t)rand();
+    }
+
+    player_key = ((uint64_t)rand() << 32) | (uint64_t)rand();
+
+    zobrist_initialized = 1;
+}
+
+
+uint64_t hash_position(const struct Position* pos) {
+    if (!zobrist_initialized) {
+        init_zobrist();
+    }
+
+    uint64_t hash = 0;
+
+//board
+    for (int file = 0; file < 8; file++) {
+        for (int rank = 0; rank < 8; rank++) {
+            char piece = pos->board[file][rank];
+            if (piece != '.') {
+                int piece_index = piece_to_index(piece);
+                if (piece_index >= 0) {
+                    hash ^= piece_keys[file][rank][piece_index];
+                }
+            }
+        }
+    }
+
+//castling
+    int castle_state = (pos->wcastle & 3) | ((pos->bcastle & 3) << 2);
+    hash ^= castle_keys[castle_state];
+
+//ep
+    if (pos->enpassant.valid &&
+        pos->enpassant.square.x >= 0 && pos->enpassant.square.x < 8) {
+        hash ^= enpassant_keys[pos->enpassant.square.x];
+        }
+
+    //player
+    if (pos->player == 1) {
+        hash ^= player_key;
+    }
+
+    return hash;
+}
+
+//Zobrist Hashing functions
+
+
+
+uint64_t updateHashSimple(uint64_t oldHash, const struct Position* oldPos, struct Move move) {
+   uint64_t hash = oldHash;
+
+   char piece = oldPos->board[move.start.x][move.start.y];
+   const int i = piece_to_index(piece);
+   if (i >= 0) {
+       hash ^= piece_keys[move.start.x][move.start.y][i];
+       if (move.promotes) {
+           hash ^= piece_keys[move.end.x][move.end.y][piece_to_index(move.promotion)];
+       } else {
+           hash ^= piece_keys[move.end.x][move.end.y][i];
+       }
+   }
+
+   char captured = oldPos->board[move.end.x][move.end.y];
+   const int c = piece_to_index(captured);
+   if (c >= 0) {
+       hash ^= piece_keys[move.end.x][move.end.y][c];
+   }
+
+   hash ^= player_key;
+   return hash;
+}
+
+uint64_t updateHashCastling(uint64_t hash, const struct Position* oldPos, struct Move move) {
+   struct Square rook = getCastleRook(oldPos, move);
+   const int r = piece_to_index(oldPos->board[rook.x][rook.y]);
+   if (r >= 0) {
+       hash ^= piece_keys[rook.x][rook.y][r];
+       int rookEndX = move.start.x + ((move.end.x > move.start.x) ? 1 : -1);
+       hash ^= piece_keys[rookEndX][move.start.y][r];
+   }
+   return hash;
+}
+
+uint64_t updateHashEnpassant(uint64_t hash, const struct Position* oldPos, struct Move move) {
+   char epPawn = oldPos->board[move.end.x][move.start.y];
+   const int e = piece_to_index(epPawn);
+   if (e >= 0) {
+       hash ^= piece_keys[move.end.x][move.start.y][e];
+   }
+   return hash;
+}
+
+uint64_t updateHashCastleRights(uint64_t hash, const struct Position* oldPos, const struct Position* newPos) {
+   int oldCastle = (oldPos->wcastle & 3) | ((oldPos->bcastle & 3) << 2);
+   int newCastle = (newPos->wcastle & 3) | ((newPos->bcastle & 3) << 2);
+   if (oldCastle != newCastle) {
+       hash ^= castle_keys[oldCastle];
+       hash ^= castle_keys[newCastle];
+   }
+   return hash;
+}
+
+uint64_t updateHashEnpassantSquare(uint64_t hash, const struct Position* oldPos, const struct Position* newPos) {
+   if (oldPos->enpassant.valid && oldPos->enpassant.square.x >= 0 && oldPos->enpassant.square.x < 8) {
+       hash ^= enpassant_keys[oldPos->enpassant.square.x];
+   }
+   if (newPos->enpassant.valid && newPos->enpassant.square.x >= 0 && newPos->enpassant.square.x < 8) {
+       hash ^= enpassant_keys[newPos->enpassant.square.x];
+   }
+   return hash;
+}
+
+uint64_t updateHash(uint64_t oldhash, const struct Position* oldPos, struct Move move)
+{
+  uint64_t newhash = oldhash;
+  const int special = getSpecialMoveType(oldPos, move);
+
+  switch (special)
+  {
+  case 1: //castling
+    newhash = updateHashSimple(newhash, oldPos, move);
+    newhash = updateHashCastling(newhash, oldPos, move);
+    break;
+
+  case 2: //ep
+    newhash = updateHashSimple(newhash, oldPos, move);
+    newhash = updateHashEnpassant(newhash, oldPos, move);
+    break;
+
+  case 0: //normal move
+  default:
+      newhash = updateHashSimple(newhash, oldPos, move);
+    break;
+  }
+
+  struct Position newPos = *oldPos;
+  makeMove(&newPos, move, special);
+  newhash = updateHashCastleRights(newhash, oldPos, &newPos);
+
+  newhash = updateHashEnpassantSquare(newhash, oldPos, &newPos);
+
+  return newhash;
+}
+
+struct HashTable* createHashTable(size_t size)
+{
+  struct HashTable* table = malloc(sizeof(struct HashTable));
+
+  size_t entry_size = sizeof(struct HashEntry);
+  size_t total_bytes = size * 1024 * 1024;
+  //table->len = total_bytes / entry_size;
+
+  table->len = 1;
+  while (table->len * 2 <= total_bytes / entry_size)
+  {
+    table->len *= 2;
+  }
+  table->entries = calloc(table->len, sizeof(struct HashEntry));
+  table->current_age = 0;
+  return table;
+}
+
+void freeHashTable(struct HashTable* table)
+{
+  free(table->entries);
+  free(table);
+}
+
+void clearHashTable(struct HashTable* table)
+{
+  memset(table->entries, 0, table->len * sizeof(struct HashEntry));
+  table->current_age = 0;
+}
+
+static inline size_t getHashIndex(const struct HashTable* table, uint64_t zobrist_key) {
+  return zobrist_key & (table->len - 1);
+}
+void logHash(struct HashTable* table, uint64_t zobrist_key, int depth, int score, int type, struct Move bestmove) {
+  size_t index = getHashIndex(table, zobrist_key);
+  struct HashEntry* entry = &table->entries[index];
+
+  int should_replace = 0;
+
+  if (entry->hash == 0) {
+    should_replace = 1;  //empty
+  } else if (entry->hash == zobrist_key) {
+    should_replace = 1;  //same position
+  } else if (depth >= entry->depth + 4) {
+    should_replace = 1;  //much deeper
+  } else if ((table->current_age - entry->age >= 4) && (depth >= entry->depth - 1)) {
+    should_replace = 1;  //old + similar depth
+  }
+
+  if (should_replace) {
+    entry->hash = zobrist_key;
+    entry->depth = depth;
+    entry->score = score;
+    entry->type = type;
+    entry->bestmove = bestmove;
+    entry->age = table->current_age;
+  }
+}
+
+int probeHash(const struct HashTable* table, uint64_t hash, int depth, int alpha, int beta, int* score, struct Move* bestmove) {
+  size_t index = getHashIndex(table, hash);
+  const struct HashEntry* entry = &table->entries[index];
+
+  if (entry->hash != hash) {
+    return 0;  //no match
+  }
+
+  if (bestmove && (entry->bestmove.start.x != -1 || entry->bestmove.start.y != -1)) {
+    *bestmove = entry->bestmove;
+  }
+
+  if (entry->depth < depth) {
+    return 0;
+  }
+
+  *score = entry->score;
+
+  switch (entry->type) {
+  case HASH_EXACT:
+    return 1;  //exact score
+  case HASH_LOWER_BOUND:
+    return entry->score >= beta ? 1 : 0;  //beta cutoff
+  case HASH_UPPER_BOUND:
+    return entry->score <= alpha ? 1 : 0;  //alpha cutoff
+  }
+
+  return 0;
+}
+
+void incrementHashAge(struct HashTable* table) {
+    table->current_age++;
+}
+
+
+
+void getPieceString(const struct Position pos, char *buf, int *len) {
+  *len = 0; // reset length at start
+
+  for (int i = 0; i < 8; i++) {
+    for (int j = 0; j < 8; j++) {
+      char c = pos.board[i][j];
+      if (c == 0) continue;
+
+      if ((pos.player && islower((unsigned char)c)) ||
+          (!pos.player && isupper((unsigned char)c))) {
+        buf[*len] = c;
+        (*len)++;
+        if (*len >= MAX_PIECES - 1)
+          goto done;
+          }
+    }
+  }
+
+  done:
+      buf[*len] = '\0';
+}
+
+//detection for positions that likely contain zugzwang
+int hasZugzwang(const struct Position pos) {
+
+  int piece_count = 0;
+  int has_non_pawn_pieces = 0;
+
+  for (int i = 0; i < 8; i++) {
+    for (int j = 0; j < 8; j++) {
+      char piece = pos.board[i][j];
+      if (piece == '.') continue;
+
+      if ((pos.player == 0 && isupper(piece)) ||
+          (pos.player == 1 && islower(piece))) {
+        piece_count++;
+        if (tolower(piece) != 'k' && tolower(piece) != 'p') {
+          has_non_pawn_pieces = 1;
+        }
+          }
+    }
+  }
+
+  return !has_non_pawn_pieces || piece_count <= 3;
+}
+
+int negamaxWithKillersAndHash(struct Position* pos, int depth, int alpha, int beta,
+                              struct HashTable* hash_table, uint64_t zobrist_key,
+                              struct KillerTable* killers, int ply, int null_move_allowed) {
+
+    // Hash Table Probe
+    int hash_score;
+    struct Move hash_move = {{-1, -1}, {-1, -1}, 0, '.'};
+
+    if (probeHash(hash_table, zobrist_key, depth, alpha, beta, &hash_score, &hash_move)) {
+        return hash_score;
+    }
+
+    if (depth == 0) {
+        int eval = getValue(*pos);
+        int score = pos->player == 0 ? eval : -eval;
+        logHash(hash_table, zobrist_key, depth, score, HASH_EXACT, hash_move);
+        return score;
+    }
+
+    // Null Move Pruning
+    if (null_move_allowed && depth >= 3 && !incheck(pos) && !hasZugzwang(*pos)) {
+        struct Position null_pos = copyPosition(pos);
+        null_pos.player = abs(null_pos.player - 1);
+        null_pos.enpassant.valid = 0;
+
+        uint64_t null_zobrist = zobrist_key ^ player_key;
+        if (pos->enpassant.valid && pos->enpassant.square.x >= 0 && pos->enpassant.square.x < 8) {
+            null_zobrist ^= enpassant_keys[pos->enpassant.square.x];
+        }
+
+        int R = (depth > 6) ? 3 : 2;
+        int null_score = -negamaxWithKillersAndHash(&null_pos, depth - 1 - R, -beta, -beta + 1,
+                                                    hash_table, null_zobrist, killers, ply + 1, 0);
+
+        if (null_score >= beta) {
+            if (depth > 6) {
+                int verification_score = -negamaxWithKillersAndHash(&null_pos, depth - 1 - R - 2, -beta, -beta + 1,
+                                                                   hash_table, null_zobrist, killers, ply + 1, 0);
+                if (verification_score >= beta) {
+                    return beta;
+                }
+            } else {
+                return beta;
+            }
+        }
+    }
+
+    int counter = 0;
+    struct Move moves[218];
+    getMoves_withOrdering(pos, moves, &counter, killers, ply);
+
+    if (hash_move.start.x != -1 || hash_move.start.y != -1) {
+        for (int i = 0; i < counter; i++) {
+            if (moves[i].start.x == hash_move.start.x &&
+                moves[i].start.y == hash_move.start.y &&
+                moves[i].end.x == hash_move.end.x &&
+                moves[i].end.y == hash_move.end.y) {
+                struct Move temp = moves[0];
+                moves[0] = moves[i];
+                moves[i] = temp;
+                break;
+            }
+        }
+    }
+
+    int best_score = -INFINITY;
+    struct Move best_move = {{-1, -1}, {-1, -1}, 0, '.'};
+    int hash_flag = HASH_UPPER_BOUND;
+
+    for (int i = 0; i < counter; i++) {
+        struct Position new_pos = copyPosition(pos);
+        uint64_t new_zobrist = updateHash(zobrist_key, pos, moves[i]);
+        makeMove(&new_pos, moves[i], getSpecialMoveType(pos, moves[i]));
+
+        int score = -negamaxWithKillersAndHash(&new_pos, depth - 1, -beta, -alpha,
+                                              hash_table, new_zobrist, killers, ply + 1, 1);
+
+        if (score > best_score) {
+            best_score = score;
+            best_move = moves[i];
+        }
+
+        if (score > alpha) {
+            alpha = score;
+            hash_flag = HASH_EXACT;
+        }
+
+        // Beta Cutoff - hier werden Killer Moves aktualisiert
+        if (alpha >= beta) {
+            hash_flag = HASH_LOWER_BOUND;
+            // Update Killers nur für quiet moves (keine Captures/Promotions)
+            updateKillers(killers, ply, moves[i], pos);
+            break;
+        }
+    }
+
+    logHash(hash_table, zobrist_key, depth, best_score, hash_flag, best_move);
+    return best_score;
+}
+
+struct Move getBestMoveWithKillers(struct Position* pos, int depth, struct HashTable* hash_table) {
+  incrementHashAge(hash_table);
+
+  //allocate new killer table
+  struct KillerTable* killers = createKillerTable();
+
+  uint64_t zobrist_key = hash_position(pos);
+
+  int alpha = -INFINITY;
+  int beta = INFINITY;
+  int best_eval = -INFINITY;
+  struct Move best_move = {{-1, -1}, {-1, -1}, 0, '.'};
+
+  int counter = 0;
+  struct Move moves[218];
+  getMoves(pos, &counter, 0, 0, 0, 0, moves);
+
+  for (int i = 0; i < counter; i++) {
+    struct Position new_pos = copyPosition(pos);
+    uint64_t new_zobrist = updateHash(zobrist_key, pos, moves[i]);
+    makeMove(&new_pos, moves[i], getSpecialMoveType(pos, moves[i]));
+
+    int eval = -negamaxWithKillersAndHash(&new_pos, depth - 1, -beta, -alpha,
+                                         hash_table, new_zobrist, killers, 1, 1);
+
+    if (eval > best_eval) {
+      best_eval = eval;
+      best_move = moves[i];
+    }
+
+    if (eval > alpha) {
+      alpha = eval;
+    }
+  }
+
+  //free killer move table
+  free(killers);
+
+  return best_move;
 }
