@@ -1,5 +1,7 @@
+#ifndef CHESS2_STRUCTS_H
+#define CHESS2_STRUCTS_H
+
 #include <stdint.h>
-#include <stdlib.h>
 struct Square {
     char x;
     char y;
@@ -8,6 +10,13 @@ struct Square {
 struct enPassant {
     int valid; 
     struct Square square; 
+};
+
+struct polyglotEntry
+{
+    uint64_t hash;
+    uint16_t move;
+    uint16_t weight;
 };
 
 struct Position {
@@ -60,9 +69,6 @@ struct HashTable {
     int current_age;            // Current search age
 };
 
-
-
-
 struct Path {
     size_t len;
     struct Square* squares;
@@ -72,3 +78,11 @@ struct KillerTable
 {
     struct Move killers[64][2];
 };
+
+struct Game {
+    struct Position position;
+    struct Move moves[1024];
+    int move_count;
+};
+
+#endif //CHESS2_STRUCTS_H
