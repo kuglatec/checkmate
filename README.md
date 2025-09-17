@@ -24,6 +24,9 @@ play.
 -   Practical strength: effective in fast time controls and
     tactics-heavy games
 
+## Requirements
+- Runs on most modern hardware (depth needs to be adjusted accordingly, iterative deepening ís not yet implemented)
+- In theory, about 5MB of Ram is needed, i reccommend about 1-2GB if you plan to use zobrist transposition tables 
 ## Build
 
 ``` bash
