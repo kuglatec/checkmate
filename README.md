@@ -42,7 +42,7 @@ coming soon
 ## Roadmap
 
 -   Improved positional evaluation (king safety, pawn structure,
-    mobility, maybe NNUE)\
+    mobility, maybe NNUE)
 -   Endgame refinements / tablebase support
 
 ## License
