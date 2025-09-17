@@ -32,7 +32,7 @@ play.
 ``` bash
 git clone https://github.com/kuglatec/checkmate
 cd checkmate
-gcc engine.c -Ofast -o checkmate
+gcc main.c -Ofast -o checkmate
 ```
 
 ## Estimated Strength
