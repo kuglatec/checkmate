@@ -32,7 +32,8 @@ play.
 ``` bash
 git clone https://github.com/kuglatec/checkmate
 cd checkmate
-gcc main.c -Ofast -o checkmate
+sudo chmod +x run.sh
+./run.sh
 ```
 
 ## Estimated Strength
