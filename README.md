@@ -6,14 +6,14 @@ play.
 
 ## Features
 
--   **UCI support** -- compatible with GUIs such as Arena, CuteChess or enCroissant\
+-   **UCI support** -- compatible with GUIs such as Arena, CuteChess or enCroissant
 -   **Move generation** -- legal moves including castling, en passant,
-    and promotions\
--   **Search** -- Negamax with pruning and quiescence search\
+    and promotions
+-   **Search** -- Negamax with pruning and quiescence search
 -   **Transposition tables** -- Zobrist hashing with exact, lower, and
-    upper bounds\
+    upper bounds
 -   **Evaluation** -- material balance with basic heuristics and
-    piece-square tables\
+    piece-square tables
 -   **FEN parser** -- load and analyze arbitrary positions
 
 ## Playing Style
@@ -36,9 +36,9 @@ sudo chmod +x run.sh
 ./run.sh
 ```
 
-## Estimated Strength
-not measured yet D:
-coming soon
+## Pleay me
+https://lichess.org/@/checkmate-engine
+only long time controls, no increment
 
 ## Roadmap
 
