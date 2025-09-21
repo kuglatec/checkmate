@@ -15,6 +15,7 @@ play.
 -   **Evaluation** -- material balance with basic heuristics and
     piece-square tables
 -   **FEN parser** -- load and analyze arbitrary positions
+-   **Zero Bloat** -- the engine is completely written from scratch, only requiring core system libraries like stdlib
 
 ## Playing Style
 
