@@ -36,7 +36,7 @@ sudo chmod +x run.sh
 ./run.sh
 ```
 
-## Pleay me
+## Play me
 https://lichess.org/@/checkmate-engine
 only long time controls, no increment
 
