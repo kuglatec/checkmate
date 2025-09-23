@@ -39,7 +39,6 @@ struct PositionWBitboard
     int ep; //en passant: index for EP square, -1 if none
     uint64_t board[12]; //bitboards for each piece
 };
-1
 
 struct SquareState {
     struct Square square;

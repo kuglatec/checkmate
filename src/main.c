@@ -3,7 +3,7 @@
 #include "structs.h"
 #include "engine.c"
 
-
+// Bitboard variation
 int main() {
     FENtoBitboardPosition("123");
     init_zobrist();
@@ -74,7 +74,7 @@ int main() {
                 }
             }
         } else if (strncmp(line, "go", 2) == 0) {
-            struct Move best_move = getBestMoveWithKillers(&position, 8, hash_table);
+            struct Move best_move = getBestMoveWithKillers(&position, 10, hash_table);
             char promo_char = best_move.promotes ? best_move.promotion : ' ';
             if (promo_char != ' ') {
               printf("bestmove %c%d%c%d%c\n", best_move.start.x + 'a', best_move.start.y + 1, best_move.end.x + 'a', best_move.end.y + 1, promo_char);

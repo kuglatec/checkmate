@@ -31,6 +31,19 @@ struct Position copyPosition(const struct Position* original) {
 }
 
 
+static inline void set_bit(uint64_t *bb, int square) { //set bit on square
+  *bb |= (1ULL << square);
+}
+
+static inline void clear_bit(uint64_t *bb, int square) { //null bit
+  *bb &= ~(1ULL << square);
+}
+
+static inline int get_bit(uint64_t bb, int square) { //check bit
+  return (bb >> square) & 1ULL;
+}
+
+
 
 struct PositionWBitboard FENtoBitboardPosition(const char* fen)
 {
@@ -42,9 +55,56 @@ struct PositionWBitboard FENtoBitboardPosition(const char* fen)
 
   for (int i = 0; i < 12; i++) {
     for (int j = 0; j < 64; j++) {
-      position.board[i][j] = 0;
+      set_bit(&position.board[i], j);
     }
   }
+
+
+  int over = 0;
+  const int len = strlen(fen);
+  char rank = 7;  // Start at rank 8 (index 7)
+  int file = 0;
+  int field = 0;
+
+  for (int i = 0; i < len; i++) {
+    char nextchar = fen[i];
+
+    if (over) {
+      // Process fields after board section
+      switch (field) {
+        case 1:
+          position.player = (nextchar == 'w') ? 0 : 1;
+          field++;
+          break;
+        default: ;
+          // Add other field processing as needed
+      }
+      continue;
+    }
+
+    if (rank < 0) {
+      // Finished all 8 ranks
+      over = 1;
+      field++;
+      i--;  // Reprocess current character in field mode
+      continue;
+    }
+
+    if (isalpha(nextchar)) {
+      position.board[file][rank] = nextchar;
+      file++;
+    } else if (nextchar == '/') {
+      rank--;
+      file = 0;
+    } else if (isdigit(nextchar)) {
+      int emptySquares = nextchar - '0';
+      file += emptySquares;
+    } else if (nextchar == ' ') {
+      over = 1;
+      field++;
+    }
+  }
+
 
   return position;
 }
