@@ -12,7 +12,7 @@
 #define HASH_LOWER_BOUND 1  //alphacuttof
 #define HASH_UPPER_BOUND 2  //beta cutoff
 #define MAX_PIECES 17
-
+//test
 const char wpromotions[4] = "QRBN";
 const char bpromotions[4] = "qrbn";
 
