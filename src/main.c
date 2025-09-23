@@ -5,6 +5,7 @@
 
 
 int main() {
+    FENtoBitboardPosition("123");
     init_zobrist();
     struct HashTable* hash_table = createHashTable(1024);
 

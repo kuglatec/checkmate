@@ -30,6 +30,25 @@ struct Position copyPosition(const struct Position* original) {
     return copy;
 }
 
+
+
+struct PositionWBitboard FENtoBitboardPosition(const char* fen)
+{
+  struct PositionWBitboard position;
+  position.wcastle  = 1;
+  position.bcastle  = 1;
+  position.bcastled = 1;
+  position.wcastled = 1;
+
+  for (int i = 0; i < 12; i++) {
+    for (int j = 0; j < 64; j++) {
+      position.board[i][j] = 0;
+    }
+  }
+
+  return position;
+}
+
 struct Position FENtoPosition(const char* fen) {
     struct Position position;
     position.bcastled = 0;
