@@ -43,6 +43,34 @@ static inline int get_bit(uint64_t bb, int square) { //check bit
   return (bb >> square) & 1ULL;
 }
 
+const char piece_to_char[] = {
+  'P', 'R', 'N', 'B', 'Q', 'K',   // white
+  'p', 'r', 'n', 'b', 'q', 'k'    // black
+};
+
+int char_to_piece(char c) {
+  switch (c) {
+    case 'P': return WHITE_PAWN;
+    case 'R': return WHITE_ROOK;
+    case 'N': return WHITE_KNIGHT;
+    case 'B': return WHITE_BISHOP;
+    case 'Q': return WHITE_QUEEN;
+    case 'K': return WHITE_KING;
+
+    case 'p': return BLACK_PAWN;
+    case 'r': return BLACK_ROOK;
+    case 'n': return BLACK_KNIGHT;
+    case 'b': return BLACK_BISHOP;
+    case 'q': return BLACK_QUEEN;
+    case 'k': return BLACK_KING;
+
+    default: printf("\ninvallid piece\n"); return -1;
+  }
+}
+
+int to_square(int file, int rank) {
+  return rank * 8 + file;
+}
 
 
 struct PositionWBitboard FENtoBitboardPosition(const char* fen)
@@ -54,9 +82,7 @@ struct PositionWBitboard FENtoBitboardPosition(const char* fen)
   position.wcastled = 1;
 
   for (int i = 0; i < 12; i++) {
-    for (int j = 0; j < 64; j++) {
-      set_bit(&position.board[i], j);
-    }
+    position.board[i] = 0;
   }
 
 
@@ -91,7 +117,8 @@ struct PositionWBitboard FENtoBitboardPosition(const char* fen)
     }
 
     if (isalpha(nextchar)) {
-      position.board[file][rank] = nextchar;
+     // position.board[file][rank] = nextchar;
+      set_bit(&position.board[char_to_piece(nextchar)], to_square(file, rank));
       file++;
     } else if (nextchar == '/') {
       rank--;
@@ -307,6 +334,26 @@ void printSquares(const struct Square* squares, size_t len) {
 
 void promote(struct Position* position, struct Move move) {
   position->board[move.end.x][move.end.y] = move.promotion;
+}
+
+void printPositionBitBoard(uint64_t boards[12]) {
+  for (int rank = 7; rank >= 0; rank--) {
+    printf("%d  ", rank + 1);
+    for (int file = 0; file < 8; file++) {
+      int square = rank * 8 + file;
+      char c = '.'; // default: leer
+
+      for (int piece = 0; piece < 12; piece++) {
+        if (boards[piece] & (1ULL << square)) {
+          c = piece_to_char[piece];
+          break; // erstes gefundenes Piece reicht
+        }
+      }
+      printf("%c ", c);
+    }
+    printf("\n");
+  }
+  printf("\n   a b c d e f g h\n\n");
 }
 
 void printPosition(struct Position position) {

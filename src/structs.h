@@ -29,6 +29,13 @@ struct Position {
     struct enPassant enpassant; //e.p. capture square
 };
 
+enum {
+    WHITE_PAWN = 0, WHITE_ROOK = 1, WHITE_KNIGHT = 2,
+    WHITE_BISHOP = 3, WHITE_QUEEN = 4, WHITE_KING = 5,
+    BLACK_PAWN = 6, BLACK_ROOK = 7, BLACK_KNIGHT = 8,
+    BLACK_BISHOP = 9, BLACK_QUEEN = 10, BLACK_KING = 11
+};
+
 struct PositionWBitboard
 {
     char player;
@@ -36,7 +43,7 @@ struct PositionWBitboard
     char bcastled;
     int wcastle; // Castle rights for white. 0 = no castling, 1 = kingside, 2 = queenside 3 = both.
     int bcastle; // same for black
-    int ep; //en passant: index for EP square, -1 if none
+    int enpassant; //en passant: index for EP square, -1 if none
     uint64_t board[12]; //bitboards for each piece
 };
 
