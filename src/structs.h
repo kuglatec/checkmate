@@ -12,6 +12,9 @@ struct enPassant {
     struct Square square; 
 };
 
+
+
+
 struct polyglotEntry
 {
     uint64_t hash;
@@ -35,6 +38,12 @@ enum {
     BLACK_PAWN = 6, BLACK_ROOK = 7, BLACK_KNIGHT = 8,
     BLACK_BISHOP = 9, BLACK_QUEEN = 10, BLACK_KING = 11
 };
+
+struct MoveBB {
+    uint16_t move;
+};
+
+
 
 struct PositionWBitboard
 {

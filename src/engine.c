@@ -816,6 +816,12 @@ int pvc(const struct Position* position, const struct Move move, const int owner
 }
 
 
+
+
+int validityCheckBitboard(const struct PositionWBitboard, )
+
+
+
 int validityCheck(const struct Position* position, struct Move move, const int skip_king_check, int castle) {
   if (move.end.x < 0 || move.end.x > 7 || move.end.y < 0 || move.end.y > 7) {
     return 0;
